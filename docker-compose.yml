@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: helpdesk-db
+    environment:
+      POSTGRES_USER: helpdesk
+      POSTGRES_PASSWORD: helpdesk_secret
+      POSTGRES_DB: helpdesk
+    ports:
+      - "47182:5432"          # porta host non convenzionale
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helpdesk"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: helpdesk-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://helpdesk:helpdesk_secret@db:5432/helpdesk
+      # Ollama gira sul Mac host (fuori da Docker)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-ministral3}
+      # Motore di trascrizione: faster-whisper ora, voxtral (endpoint OpenAI-compatible vLLM) in futuro
+      TRANSCRIBE_ENGINE: ${TRANSCRIBE_ENGINE:-faster-whisper}
+      WHISPER_MODEL: ${WHISPER_MODEL:-medium}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      VOXTRAL_BASE_URL: ${VOXTRAL_BASE_URL:-}
+      VOXTRAL_MODEL: ${VOXTRAL_MODEL:-}
+      LANGUAGE: it
+    ports:
+      - "47181:8000"          # API backend
+    # Limita la CPU usata da Whisper per non rallentare il Mac durante la trascrizione
+    cpus: ${BACKEND_CPUS:-4}
+    volumes:
+      - audio_data:/data/audio
+      - whisper_cache:/root/.cache/huggingface
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ./frontend
+    container_name: helpdesk-frontend
+    depends_on:
+      - backend
+    ports:
+      - "47180:80"            # UI web
+
+volumes:
+  db_data:
+  audio_data:
+  whisper_cache:
