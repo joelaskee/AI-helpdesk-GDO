@@ -34,6 +34,7 @@ class Call(Base):
     summary: Mapped[dict | None] = mapped_column(JSONB)       # {riassunto, punti_chiave, ...}
     ticket: Mapped[dict | None] = mapped_column(JSONB)        # CRM simulato compilato dall'operatore
     completeness: Mapped[dict | None] = mapped_column(JSONB)  # {score, presenti, mancanti, ...}
+    store_match: Mapped[dict | None] = mapped_column(JSONB)   # {codici_rilevati, matches[], ambiguo}
 
     def to_dict(self):
         return {
@@ -50,4 +51,28 @@ class Call(Base):
             "summary": self.summary,
             "ticket": self.ticket,
             "completeness": self.completeness,
+            "store_match": self.store_match,
+        }
+
+
+class Pdv(Base):
+    """Anagrafica punti vendita (importata da Excel)."""
+
+    __tablename__ = "pdv"
+
+    codice: Mapped[str] = mapped_column(String(30), primary_key=True)  # 'Nome Pdv'
+    intestazione: Mapped[str | None] = mapped_column(String(255))
+    cognome: Mapped[str | None] = mapped_column(String(255))
+    indirizzo: Mapped[str | None] = mapped_column(String(255))
+    citta: Mapped[str | None] = mapped_column(String(255))
+    tipo: Mapped[str | None] = mapped_column(String(100))
+
+    def to_dict(self):
+        return {
+            "codice": self.codice,
+            "intestazione": self.intestazione,
+            "cognome": self.cognome,
+            "indirizzo": self.indirizzo,
+            "citta": self.citta,
+            "tipo": self.tipo,
         }

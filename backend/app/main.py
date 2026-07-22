@@ -1,3 +1,4 @@
+import io
 import logging
 import os
 import time
@@ -10,7 +11,7 @@ from sqlalchemy import select
 
 from .db import Base, SessionLocal, engine
 from .models import Call
-from .services import llm, pipeline, transcription
+from .services import llm, pdv, pipeline, transcription
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,6 +48,70 @@ def health():
         "whisper_model": transcription.WHISPER_MODEL,
         "ollama": llm.check_ollama(),
     }
+
+
+# ---- Anagrafica PDV ----------------------------------------------------------
+
+# Mappa colonne Excel -> campi tabella (robusta a maiuscole/spazi)
+_PDV_COLS = {
+    "nome pdv": "codice",
+    "intestazione pdv": "intestazione",
+    "cognome": "cognome",
+    "via indirizzo postale": "indirizzo",
+    "città indirizzo postale": "citta",
+    "citta indirizzo postale": "citta",
+    "tipo pdv": "tipo",
+}
+
+
+@app.get("/api/pdv/status")
+def pdv_status():
+    return {"count": pdv.count()}
+
+
+@app.post("/api/pdv/import")
+async def pdv_import(file: UploadFile = File(...)):
+    import openpyxl
+
+    content = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        raise HTTPException(400, f"Excel non leggibile: {e}")
+
+    ws = wb[wb.sheetnames[0]]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "Foglio vuoto")
+
+    header = [str(h or "").strip().lower() for h in rows[0]]
+    idx = {}
+    for i, h in enumerate(header):
+        if h in _PDV_COLS:
+            idx[_PDV_COLS[h]] = i
+    if "codice" not in idx:
+        raise HTTPException(400, "Colonna 'Nome Pdv' non trovata nel foglio")
+
+    parsed = []
+    for r in rows[1:]:
+        if not r or r[idx["codice"]] in (None, ""):
+            continue
+        rec = {}
+        for field, i in idx.items():
+            val = r[i] if i < len(r) else None
+            rec[field] = str(val).strip() if val not in (None, "") else None
+        # il codice può arrivare come numero: normalizza senza decimali
+        code = rec.get("codice") or ""
+        if code.endswith(".0"):
+            code = code[:-2]
+        rec["codice"] = code
+        parsed.append(rec)
+
+    n = pdv.import_rows(parsed)
+    return {"imported": n, "total": pdv.count()}
+
+
+# ---- Chiamate ----------------------------------------------------------------
 
 
 @app.post("/api/calls")
@@ -152,3 +217,17 @@ def reprocess(call_id: str):
     _get_call(call_id)
     pipeline.enqueue(call_id)
     return {"id": call_id, "status": "requeued"}
+
+
+@app.post("/api/calls/{call_id}/identify-store")
+def identify_store(call_id: str):
+    """Ri-esegue solo il riconoscimento PDV (senza ritrascrivere)."""
+    call = _get_call(call_id)
+    if not call.transcript_text:
+        raise HTTPException(409, "Trascrizione non ancora disponibile")
+    result = pdv.identify(call.transcript_text)
+    with SessionLocal() as db:
+        c = db.get(Call, call_id)
+        c.store_match = result
+        db.commit()
+    return _get_call(call_id).to_dict()

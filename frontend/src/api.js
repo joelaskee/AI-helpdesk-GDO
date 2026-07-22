@@ -27,5 +27,12 @@ export const api = {
     }).then(json),
   runCompleteness: (id) => fetch(`${BASE}/calls/${id}/completeness`, { method: 'POST' }).then(json),
   reprocess: (id) => fetch(`${BASE}/calls/${id}/reprocess`, { method: 'POST' }).then(json),
+  identifyStore: (id) => fetch(`${BASE}/calls/${id}/identify-store`, { method: 'POST' }).then(json),
+  pdvStatus: () => fetch(`${BASE}/pdv/status`).then(json),
+  importPdv: (file) => {
+    const fd = new FormData()
+    fd.append('file', file, file.name)
+    return fetch(`${BASE}/pdv/import`, { method: 'POST', body: fd }).then(json)
+  },
   audioUrl: (id) => `${BASE}/calls/${id}/audio`,
 }

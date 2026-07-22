@@ -6,6 +6,17 @@ Prototipo per l'analisi delle telefonate dell'helpdesk tecnico (GDO, fonia Aster
 2. **Verifica qualità trascrizione**: un LLM segnala punti incoerenti o privi di senso
 3. **Sintesi** con riassunto e punti chiave emersi
 4. **CRM ticketing simulato** + **percentuale di completezza**: confronto tra quanto scritto dall'operatore e quanto emerso in chiamata
+5. **Riconoscimento punto vendita (PDV)**: dal codice negozio pronunciato nella chiamata, identifica il negozio confrontandolo con l'anagrafica importata da Excel
+
+## Riconoscimento punto vendita
+
+Nelle chiamate l'utente si identifica con il codice del proprio negozio. Il sistema lo riconosce con approccio **ibrido**:
+
+1. estrazione dei codici dal testo con regex (cifre, anche pronunciate spaziate: "3 9 2 7 2");
+2. estrazione via LLM dei numeri detti a voce ("tre nove due sette cinque" → "39275");
+3. **lookup deterministico** sull'anagrafica: un negozio è confermato solo se il codice esiste davvero in tabella (l'LLM propone, non inventa).
+
+Carica l'anagrafica dalla UI (**🏬 Carica anagrafica PDV**) con l'Excel dei negozi. Colonne attese: `Nome Pdv` (codice), `Intestazione PDV`, `Cognome`, `Via indirizzo postale`, `Città indirizzo postale`, `Tipo PDV`. Per le chiamate già trascritte prima del caricamento, usa 🔄 sulla card "Punto vendita" per ri-riconoscere.
 
 ## Architettura
 

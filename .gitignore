@@ -21,3 +21,19 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Dati del cliente — NON committare (negozi, chiamate reali)
+*.xlsx
+*.xls
+elenco_pdv*
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+data/
+audio/
+
+# Report/artefatti locali
+disk_report.txt
+disk_report.sh

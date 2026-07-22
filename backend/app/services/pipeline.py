@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ..db import SessionLocal
 from ..models import Call
-from . import llm, transcription
+from . import llm, pdv, transcription
 
 log = logging.getLogger("pipeline")
 
@@ -55,7 +55,15 @@ def _process(call_id: str):
             _set(call_id, status="error", error="Trascrizione vuota: nessun parlato rilevato")
             return
 
-        # 2. Verifica di coerenza della trascrizione
+        # 2. Riconoscimento punto vendita dal codice pronunciato
+        try:
+            store_match = pdv.identify(transcript)
+        except Exception as e:
+            log.warning("identificazione PDV fallita: %s", e)
+            store_match = {"error": str(e)}
+        _set(call_id, store_match=store_match)
+
+        # 3. Verifica di coerenza della trascrizione
         try:
             coherence = llm.coherence_check(transcript)
         except Exception as e:
@@ -63,7 +71,7 @@ def _process(call_id: str):
             coherence = {"error": str(e)}
         _set(call_id, coherence=coherence)
 
-        # 3. Sintesi e punti chiave
+        # 4. Sintesi e punti chiave
         try:
             summary = llm.summarize(transcript)
         except Exception as e:

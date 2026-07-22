@@ -126,6 +126,54 @@ function CallList({ calls, selectedId, onSelect, onDelete }) {
   )
 }
 
+/* ---------- Card negozio riconosciuto ---------- */
+function StoreCard({ call, onChanged }) {
+  const [busy, setBusy] = useState(false)
+  const sm = call.store_match
+  if (!call.transcript_text) return null
+
+  const reidentify = async () => {
+    setBusy(true)
+    try { await api.identifyStore(call.id); onChanged() }
+    catch (e) { alert(e.message) }
+    finally { setBusy(false) }
+  }
+
+  const matches = sm?.matches || []
+  return (
+    <div className="store-card">
+      <div className="store-head">
+        <span>🏬 Punto vendita</span>
+        <button className="icon-btn" onClick={reidentify} disabled={busy} title="Ri-riconosci dal testo">
+          {busy ? '…' : '🔄'}
+        </button>
+      </div>
+      {matches.length > 0 ? (
+        matches.map((m) => (
+          <div key={m.codice} className="store-match">
+            <div className="store-code">{m.codice}</div>
+            <div className="store-info">
+              <strong>{m.intestazione || '—'}</strong>
+              <span className="muted small">
+                {[m.citta, m.tipo].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+          </div>
+        ))
+      ) : sm?.note ? (
+        <p className="muted small">{sm.note}</p>
+      ) : sm?.codici_rilevati?.length ? (
+        <p className="muted small">
+          Codici rilevati ({sm.codici_rilevati.join(', ')}) ma nessuno presente in anagrafica.
+        </p>
+      ) : (
+        <p className="muted small">Nessun codice negozio riconosciuto nella chiamata.</p>
+      )}
+      {sm?.ambiguo && <p className="alert red small">⚠ Più negozi rilevati: verificare quale sia corretto.</p>}
+    </div>
+  )
+}
+
 /* ---------- Pannello analisi (trascrizione, coerenza, sintesi) ---------- */
 function AnalysisPanel({ call, onChanged }) {
   const [tab, setTab] = useState('transcript')
@@ -163,6 +211,8 @@ function AnalysisPanel({ call, onChanged }) {
       {['uploaded', 'transcribing', 'analyzing'].includes(call.status) && (
         <div className="alert info">Elaborazione in corso… la pagina si aggiorna da sola.</div>
       )}
+
+      <StoreCard call={call} onChanged={onChanged} />
 
       <audio controls src={api.audioUrl(call.id)} className="audio-player" />
 
@@ -408,7 +458,9 @@ export default function App() {
   const [calls, setCalls] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [call, setCall] = useState(null)
+  const [pdvCount, setPdvCount] = useState(null)
   const fileRef = useRef(null)
+  const pdvRef = useRef(null)
 
   const refreshList = useCallback(() => {
     api.listCalls().then(setCalls).catch(() => {})
@@ -419,10 +471,15 @@ export default function App() {
     else setCall(null)
   }, [selectedId])
 
+  const refreshPdv = useCallback(() => {
+    api.pdvStatus().then((s) => setPdvCount(s.count)).catch(() => {})
+  }, [])
+
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null))
     refreshList()
-  }, [refreshList])
+    refreshPdv()
+  }, [refreshList, refreshPdv])
 
   useEffect(() => { refreshCall() }, [refreshCall])
 
@@ -441,6 +498,16 @@ export default function App() {
       setSelectedId(res.id)
     } catch (e) {
       alert('Upload fallito: ' + e.message)
+    }
+  }
+
+  const importPdv = async (file) => {
+    try {
+      const res = await api.importPdv(file)
+      setPdvCount(res.total)
+      alert(`Anagrafica importata: ${res.imported} negozi (totale ${res.total}).`)
+    } catch (e) {
+      alert('Import fallito: ' + e.message)
     }
   }
 
@@ -495,6 +562,22 @@ export default function App() {
             hidden
             onChange={(e) => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = '' }}
           />
+          <div className="pdv-box">
+            <button className="btn" onClick={() => pdvRef.current.click()}>
+              🏬 Carica anagrafica PDV
+            </button>
+            <input
+              ref={pdvRef}
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+              onChange={(e) => { if (e.target.files[0]) importPdv(e.target.files[0]); e.target.value = '' }}
+            />
+            <span className="muted small">
+              {pdvCount == null ? '' : pdvCount > 0 ? `${pdvCount} negozi in anagrafica` : 'Nessuna anagrafica caricata'}
+            </span>
+          </div>
+
           <h2>Chiamate</h2>
           <CallList calls={calls} selectedId={selectedId} onSelect={setSelectedId} onDelete={del} />
         </aside>

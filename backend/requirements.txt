@@ -6,3 +6,4 @@ faster-whisper==1.1.*
 httpx==0.27.*
 requests==2.32.*
 python-multipart==0.0.*
+openpyxl==3.1.*
